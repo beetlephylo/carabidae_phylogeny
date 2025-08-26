@@ -22,7 +22,6 @@ def process_blast_results(input):
 
     with open(input, "r") as file:
         data = file.readlines()
-        for line in data:
         for txid, gbid, start, end in (line.strip().split("\t") for line in data):
             start = int(start)
             end = int(end)
