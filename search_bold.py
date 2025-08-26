@@ -1,10 +1,10 @@
-# Script to download sequences and associated metadata from BOLD v4
+#!/usr/bin/env python3
 
 import argparse
 import requests
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Download barcodes and metadata from BOLD Systems.")
+    parser = argparse.ArgumentParser(description="Download barcodes and metadata from BOLD v4.")
     parser.add_argument("-t", "--taxon", help="Specify taxon (single or comma delimited list)")
     parser.add_argument("-i", "--ids", help="File with list of BOLD IDs, one per line")
     parser.add_argument("-o", "--output", help="Output TSV file path")

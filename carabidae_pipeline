@@ -4,7 +4,7 @@
 # Profile fastas to improve alignemnt
 
 
-# Scripts Needed
+# Scripts
 https://github.com/beetlephylo/carabidae_phylogeny
 process_blast.py
 search_bold.py
@@ -16,7 +16,6 @@ supermatrix_count.py
 filter_fasta.py
 ry_code.py
 ptp_filter_output.py
-
 rename_tree.R
 
 https://github.com/tjcreedy/biotools
@@ -29,6 +28,16 @@ catfasta2phyml.pl
 
 https://github.com/FLCarpenter/PhyloCode
 PhyMetrics.R
+
+# Packages
+
+python
+biopython
+requests
+r-base
+r-getopt
+r-dplyr
+blast
 
 
 ################
@@ -55,7 +64,7 @@ get_species_taxids.sh -t $txid > $taxon.txids
 blastn -db nt -query $gene.fasta -taxidlist $taxon.txids -out $gene.blast -max_target_seqs 100000 -outfmt '6 staxids sacc sstart send' -evalue 1e-5
 
 # For each gene, get coordinates of longest sequence for each TXID
-python3 process_blast.py -i $gene.blast -o $gene.out -e email
+python process_blast.py -i $gene.blast -o $gene.out -e email
 
 # For each gene, extract sequences from BLAST database
 > "$gene.fasta"
@@ -80,10 +89,10 @@ sed -i 's/^\(>[^.]*\).*/\1/' *fasta
 
 # Retrive BOLD sequences and metadata for Carabidae
 # Note, this script was used with BOLD v.4. The API has now been updated for BOLD v.5.
-python3 search_bold.py -t Carabidae -o raw_metadata.tsv
+python search_bold.py -t Carabidae -o raw_metadata.tsv
 
-# For each gene, filter one barcode per BIN and write to fasta
-Rscript bold_cli.R -c raw_metadata.tsv -b -g
+# For each gene, remove genbank seqeunces and write to fasta
+Rscript bold_filter.R -i raw_metadata.tsv -g
 
 
 #####################
@@ -101,7 +110,7 @@ Rscript bold_cli.R -c raw_metadata.tsv -b -g
 
 # Quick alignment to correct any reverse complement sequences
 mafft --add input_file --maxiterate 0 --adjustdirection --thread THREADS nt_profile >  output_file
-#Remove gaps and find reading frame
+# Remove gaps
 sed "/>/! s/-//g" input_file > output_file
 # Find reading frame - table 1 for nuclear, 5 for invertebrate mitochondrial
 findframe.py -r aa_profile -t table -s -u < input_file > output_file
@@ -117,13 +126,13 @@ translate.py table < input_file > output_file
 # For each fasta file:
 
 # Align to amino acid profile for coding genes, nucleotide profile for non-coding genes
-mafft --add input_file --maxiterate 2 --adjustdirection --thread num_threads gene_profile_fasta >  output_file
+mafft --add input_file --maxiterate 2 --adjustdirection --thread num_threads aa_profile >  output_file
 
 # Remove profile sequences
 perl -pe '$. > 1 and /^>/ ? print "\n" : chomp' input_file | grep -A 1 -P '^>(?!PROFILE::).*' > output_file
 
-# Translate coding sequences back to nucleotide - table 1 for nuclear, 5 for invertebrate mitochondrial
-~/apps/github/biotools/backtranslate.py -i input_file $gene.frame.fasta table > output_file
+# Translate coding sequences back to nucleotide - translation table 1 for nuclear, 5 for invertebrate mitochondrial
+backtranslate.py -i input_file $gene.frame.fasta translation_table > output_file
 
 
 #####################################################
@@ -137,24 +146,24 @@ perl -pe '$. > 1 and /^>/ ? print "\n" : chomp' input_file | grep -A 1 -P '^>(?!
 ###########################
 
 # For each fasta file:
-  # Remove reading frame tags
-  sed -i -E "s/;frame=[0-9]*(;$)?//" input_file
-  # Remove _R_ from reversed sequences
-  sed -i -E "s/^>_R_/>/" input_file
-  # Rename sequences with ncbi taxids
-  python3 rename_fasta.py -i input_file -c metadata.csv -l -r ids_nt/csv_output -o output_file
+    # Remove reading frame tags
+    sed -i -E "s/;frame=[0-9]*(;$)?//" input_file
+    # Remove _R_ from reversed sequences
+    sed -i -E "s/^>_R_/>/" input_file
+    # Rename sequences with ncbi taxids
+    python rename_fasta.py -i input_file -c metadata.csv -l -r ids_nt/csv_output -o output_file
 
 # Write gene source CSV
-Rscript merge_rename_fasta_csv.R -d ids_nt/ -o ids_nt.csv
+Rscript merge_rename_fasta_csv.R ids_nt/* > ids_nt.csv
 
 # Write nucleotide supermatrix
 catfasta2phyml.pl -c -fasta fastas > 1_nt_supermatrix.fasta 2> 1_nt_partitions.txt
 
 # Convert partition files to RAxML format
-python3 partitions.py -i 1_nt_partitions.txt -t nt -p prefix
+python partitions.py -i 1_nt_partitions.txt -t nt -p prefix
 
 # Write gene representation CSV
-python3 supermatrix_count.py -f 1_nt_supermatrix.fasta -p 1_nt_partitions.txt -o 1_nt.csv
+python supermatrix_count.py -f 1_nt_supermatrix.fasta -p 1_nt_partitions.txt -o 1_nt.csv
 
 
 ########################
@@ -165,7 +174,7 @@ python3 supermatrix_count.py -f 1_nt_supermatrix.fasta -p 1_nt_partitions.txt -o
 # In this study, sequeces with >3000 bps of mitochondrial coding genes were selected
 
 # Filter out chosen sequences from all seqeunce files
-python3 ~/apps/github/genbank/filter_fasta.py -i input_file -s chosen_ids -t list -f output_file
+python ~/apps/github/genbank/filter_fasta.py -i input_file -s chosen_ids -t list -f output_file
 
 # Realign mitogenome sequences
 mafft --add input_file --maxiterate 2 --adjustdirection --thread num_threads gene_profile_fasta >  output_file
@@ -175,12 +184,12 @@ mafft --add input_file --maxiterate 2 --adjustdirection --thread num_threads gen
 ~/apps/github/catfasta2phyml/catfasta2phyml.pl -c -fasta nt_fasta_files > 2_aa_mito_supermatrix.fasta 2> 2_mitogenome_nt_partitions.txt
 
 # Write RY-coded supermatrix
-python3 ry_code.py -i 2_mitogenome_nt_supermatrix.fasta -o 2_mitogenome_ry_supermatrix.fasta -n
+python ry_code.py -i 2_mitogenome_nt_supermatrix.fasta -o 2_mitogenome_ry_supermatrix.fasta -n
 
 # Convert partition files to IQTREE format
-python3 partitions.py -i 2_mitogenome_aa_partitions.txt -t aa -q -p 4_mito
-python3 partitions.py -i 2_mitogenome_nt_partitions.txt -t nt -q -p 4_mito
-python3 partitions.py -i 2_mitogenome_nt_partitions.txt -t ry -q -p 4_mito
+python partitions.py -i 2_mitogenome_aa_partitions.txt -t aa -q -p 4_mito
+python partitions.py -i 2_mitogenome_nt_partitions.txt -t nt -q -p 4_mito
+python partitions.py -i 2_mitogenome_nt_partitions.txt -t ry -q -p 4_mito
 
 # IQ-TREE ModelFinder
 # Gene partitions for protein supermatrix. Gene and codon partitions for nucleotide and RY-coded supermatrices
@@ -238,7 +247,7 @@ raxml-ng --search1 --msa 1_nt_supermatrix.fasta --prefix 1_full --model 1_partit
 # An inclusion threshold of >250 bps COI 5' was used
 
 # Filter out chosen sequences from all seqeunce files
-python3 ~/apps/github/genbank/filter_fasta.py -i input_file -s chosen_ids -t list -f output_file
+python ~/apps/github/genbank/filter_fasta.py -i input_file -s chosen_ids -t list -f output_file
 
 # Realign sequences
 mafft --add input_file --maxiterate 2 --adjustdirection --thread num_threads gene_profile_fasta >  output_file
@@ -247,7 +256,7 @@ mafft --add input_file --maxiterate 2 --adjustdirection --thread num_threads gen
 ~/apps/github/catfasta2phyml/catfasta2phyml.pl -c -fasta aa_fasta_files > 3_nt_coi_supermatrix.fasta 2> 3_nt_coi_partitions.txt
 
 # Convert partition files to RAxML format
-python3 partitions.py -i 3_nt_coi_partitions.txt -t nt -p prefix 3_nt_coi
+python partitions.py -i 3_nt_coi_partitions.txt -t nt -p prefix 3_nt_coi
 
 # Repeat phylogeny
 raxml-ng --search1 --msa 3_nt_coi_supermatrix.fasta --prefix 3_coi --model 3_nt_coi_partitions_gene.txt --threads num_threads --tree-constraint mitogenome_tree
@@ -267,7 +276,7 @@ mptp --minbr_auto 3_nt_coi_supermatrix.fasta --tree_file treeshrink_output_tree 
 ptp --ml --single --minbr $minbr --tree_file treeshrink_output_tree --output_file mptp  --outgroup $outgroup
 
 # Choose taxon with most nucleotides for each PTP species
-python3 ptp_filter_output.py -i mptp_output -s 3_nt_coi_supermatrix.fasta -o ptp_chosen.txt
+python ptp_filter_output.py -i mptp_output -s 3_nt_coi_supermatrix.fasta -o ptp_chosen.txt
 
 
 #####################################
@@ -276,7 +285,7 @@ python3 ptp_filter_output.py -i mptp_output -s 3_nt_coi_supermatrix.fasta -o ptp
 
 # Filter out chosen sequences from all seqeunce files
 # Taxa with a unique binomial were retained regardless of the mPTP result - these IDs were added to ptp_chosen.txt
-python3 filter_fasta.py -i input_file -s ptp_chosen.txt -t list -f output_file
+python filter_fasta.py -i input_file -s ptp_chosen.txt -t list -f output_file
 
 # Realign sequences
 mafft --add input_file --maxiterate 2 --adjustdirection --thread num_threads gene_profile_fasta >  output_file
@@ -285,10 +294,10 @@ mafft --add input_file --maxiterate 2 --adjustdirection --thread num_threads gen
 ~/apps/github/catfasta2phyml/catfasta2phyml.pl -c -fasta aa_fasta_files > 4_nt_ptp_supermatrix.fasta 2> 4_nt_ptp_partitions.txt
 
 # Convert to RY-coded supermatrix
-python3 ry_code.py -i 4_nt_ptp_supermatrix.fasta -o 4_ry_ptp_supermatrix.fasta -n
+python ry_code.py -i 4_nt_ptp_supermatrix.fasta -o 4_ry_ptp_supermatrix.fasta -n
 
 # Convert partition files to RAxML format
-python3 partitions.py -i 4_nt_ptp_partitions.txt -t ry -p prefix 4_ry_ptp
+python partitions.py -i 4_nt_ptp_partitions.txt -t ry -p prefix 4_ry_ptp
 
 
 #############
@@ -307,4 +316,11 @@ echo 'Highest log likelihood:' $best
 # Biogeography #
 ################
 
-pastml --tree chosen_tree --data metadata -c realm -s ',' -o pastml_output.csv --html_compressed pastml_map.html --upload_to_itol --work_dir output_dir
+pastml --tree chosen_tree --data metadata -c realm -s ',' -o pastml_output.csv --html_compressed pastml_map.html --upload_to_itol --work_dir output_directory
+
+
+#####################
+# Taxonomic Indices #
+#####################
+
+Rscript PhyMetrics.R -t input_tree -m metadata -k subfamily,tribe,subtribe,genus -o outgroup_taxa -p prefix

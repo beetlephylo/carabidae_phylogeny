@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+ 
 import argparse
 import os
 
@@ -27,7 +29,7 @@ def process_partition_file(input_file, sequence_type):
 
 def write_partitions(partitions, sequence_type, prefix):
     data = data_map[sequence_type]
-    with open(f'{prefix}_partitions_{sequence_type}_gene.txt', 'w') as outfile:
+    with open(f'{prefix}partitions_{sequence_type}_gene.txt', 'w') as outfile:
         for partition_name, coordinates in partitions.items():
             if not any(g in partition_name for g in non_coding_genes):
                 outfile.write(f'{data}, {partition_name} = {coordinates}\n')
@@ -35,7 +37,7 @@ def write_partitions(partitions, sequence_type, prefix):
                 outfile.write(f'DNA, {partition_name} = {coordinates}\n')
 
     if sequence_type != 'aa':
-        with open(f'{prefix}_partitions_{sequence_type}_codon.txt', 'w') as outfile:
+        with open(f'{prefix}partitions_{sequence_type}_codon.txt', 'w') as outfile:
             for partition_name, coordinates in partitions.items():
                 if not any(g in partition_name for g in non_coding_genes):
                     coords = coordinates.split('-')
@@ -62,7 +64,7 @@ def main():
         non_coding_genes.extend(args.non_coding.split(','))
 
     partitions = process_partition_file(args.input, args.sequence_type)
-
+    prefix = f'{args.prefix}_' if args.prefix else ''
     write_partitions(partitions, args.sequence_type, args.prefix)
 
 

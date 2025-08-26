@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import argparse
 from Bio import Entrez, SeqIO
 import time
@@ -21,7 +23,6 @@ def process_blast_results(input):
     with open(input, "r") as file:
         data = file.readlines()
         for line in data:
-            print(line)
         for txid, gbid, start, end in (line.strip().split("\t") for line in data):
             start = int(start)
             end = int(end)
