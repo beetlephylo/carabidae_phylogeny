@@ -8,7 +8,7 @@ def parse_args():
     parser.add_argument("-i", "--input", type=str, help="Catfasta partition file")
     parser.add_argument('-p', '--prefix', type=str, help="Output file prefix")
     parser.add_argument('-q', '--iqtree', action='store_true', help="Output IQTREE format (standard is RAxML)")
-    parser.add_argument('-t', '--sequence_type', choices=['aa', 'nt', 'ry'], help="Specify sequence type: protein, nucleotide or RY-coded")
+    parser.add_argument('-t', '--sequence_type', choices=['aa', 'nt', 'bin'], help="Specify sequence type: protein, nucleotide or binary RY-coded")
     # 12S, 16S, 18S and 28S will be treated as non coding genes by default. Any aditional non-coding genes, or differnet naming format, can be added using -n
     parser.add_argument('-n', '--non-coding', type=str, help="Comma delimited list of non-coding genes")
     return parser.parse_args()
