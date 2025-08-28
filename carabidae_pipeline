@@ -281,10 +281,13 @@ raxml-ng --search1 --msa 3_nt_coi_supermatrix.fasta --prefix 3_coi --model 3_nt_
 run_treeshrink.py -t input_tree
 
 # Calculate minbr value
-mptp --minbr_auto 3_nt_coi_supermatrix.fasta --tree_file treeshrink_output_tree --output_file minbr --outgroup outgroup_taxa_list
+mptp --minbr_auto 3_nt_coi_supermatrix.fasta --tree_file treeshrink_output_tree --output_file prefix --outgroup outgroup_taxa_list
 
 # Run PTP
-ptp --ml --single --minbr $minbr --tree_file treeshrink_output_tree --output_file mptp  --outgroup $outgroup
+mptp --ml --single --minbr $minbr --tree_file treeshrink_output_tree --output_file prefix  --outgroup $outgroup
+
+# Run MCMC to assess delimitation
+mptp --mcmc 10000000 --mcmc_sample 1000 --mcmc_log 1000 --mcmc_runs 4 --single --minbr $minbr--tree_file treeshrink_output_tree --output_file prefix
 
 # Choose taxon with most nucleotides for each PTP species
 ptp_filter_output.py -i mptp_output -s 3_nt_coi_supermatrix.fasta -o ptp_chosen.txt
