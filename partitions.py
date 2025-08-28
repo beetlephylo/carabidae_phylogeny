@@ -3,12 +3,20 @@
 import argparse
 import os
 
+
+non_coding_genes = ['12S', '16S', '18S', '28S']
+
+data_map = {'aa': 'PROT',
+        'nt': 'DNA',
+        'ry': 'BIN'}
+        
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Create raxml-compatible partition files from catfasta2phyml.pl output (https://github.com/nylander/catfasta2phyml)")
     parser.add_argument("-i", "--input", type=str, help="Catfasta partition file")
     parser.add_argument('-p', '--prefix', type=str, help="Output file prefix")
     parser.add_argument('-q', '--iqtree', action='store_true', help="Output IQTREE format (standard is RAxML)")
-    parser.add_argument('-t', '--sequence_type', choices=['aa', 'nt', 'bin'], help="Specify sequence type: protein, nucleotide or binary RY-coded")
+    parser.add_argument('-t', '--sequence_type', choices=['aa', 'nt', 'ry'], help="Specify sequence type: protein, nucleotide or binary RY-coded")
     # 12S, 16S, 18S and 28S will be treated as non coding genes by default. Any aditional non-coding genes, or differnet naming format, can be added using -n
     parser.add_argument('-n', '--non-coding', type=str, help="Comma delimited list of non-coding genes")
     return parser.parse_args()
@@ -47,13 +55,6 @@ def write_partitions(partitions, sequence_type, prefix):
                         outfile.write(f'{data}, {partition_name}.{i + 1} = {start + i}-{end}\\3\n')
                 else:
                     outfile.write(f'DNA, {partition_name} = {coordinates}\n')
-
-
-non_coding_genes = ['12S', '16S', '18S', '28S']
-
-data_map = {'aa': 'PROT',
-        'nt': 'DNA',
-        'bin': 'RY'}
 
 
 def main():
