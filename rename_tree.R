@@ -72,7 +72,7 @@ process_metadata <- function(metadata, tree, tips, label, drop_old, prefix) {
     }
     df <- df %>%
       mutate(new_names_col = gsub("NA", "", new_names_col)) %>%
-      mutate(new_names_col = gsub("_+$|\\s", "_", new_names_col)) %>%
+      mutate(new_names_col = gsub("_+$|\\s", "", new_names_col)) %>%
       select(old_names_col, new_names_col) %>%
       unique()
   
