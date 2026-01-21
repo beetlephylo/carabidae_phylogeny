@@ -1,4 +1,4 @@
-# Filter output from BOLD v4 API
+# Filter output from BOLD v5 API
 
 # Load packages
 library(getopt)
@@ -20,14 +20,14 @@ load_data <- function(input) {
   meta[meta == 'None'] <- NA
   meta[meta == ''] <- NA  
   # Remove records without sequences
-  meta <- meta %>% filter(!is.na(markercode) & !is.na(nucleotides))
+  meta <- meta %>% filter(!is.na(marker_code) & !is.na(nuc))
   return(meta)
 }
 
 
 # Filter out GenBank sequences
 filter_genbank <- function(meta) {
-  meta <- meta %>% filter(institution_storing != 'Mined from GenBank, NCBI')
+  meta <- meta %>% filter(inst != 'Mined from GenBank, NCBI')
   cat(nrow(meta), 'records remaining after removing those from GenBank\n')
   return(meta)
 }
@@ -60,10 +60,10 @@ filter_longest <- function(meta, longest) {
   }  
   # Keep longest sequence for each species, for each gene
   else if ( longest == 'species') {
-    no_species <- meta %>% filter(is.na(species_name)) 
+    no_species <- meta %>% filter(is.na(species)) 
     unique_species <- meta %>% 
-      arrange(species_name, markercode, desc(sequence_length)) %>% 
-      distinct(species_name, .keep_all = TRUE) 
+      arrange(species, markercode, desc(sequence_length)) %>% 
+      distinct(species, .keep_all = TRUE) 
     meta <- bind_rows(no_species, unique_species)
 
     cat(paste('Keeping one sequences for each unique species name:', nrow(unique_species), 'found\n'))
@@ -74,13 +74,22 @@ filter_longest <- function(meta, longest) {
 }
 
 
+split_coordinates <- function(meta) {
+  meta$coord <- gsub("\\[|\\]", "", meta$coord)
+  coords <- strsplit(meta$coord[!is.na(meta$coord)], ", ")
+  meta$latitude[!is.na(meta$coord)] <- as.numeric(sapply(coords, function(x) x[1]))
+  meta$longitude[!is.na(meta$coord)] <- as.numeric(sapply(coords, function(x) x[2]))
+  return(meta)
+}
+
+
 # Write CSV metadata file
 write_csv <- function(meta) {
   empty <- c('subgenus', 'subtribe',	'tribe', 'superfamily',	'infraorder',	'suborder')
   meta[ , empty] <- ''
   csv <- meta %>% 
-    select(	processid, bin_uri,	suborder,	infraorder, superfamily, family_name, subfamily_name, 
-          tribe, subtribe, genus_name, subgenus, species_name, subspecies_name, country,	lat,	lon) %>%
+    select(	processid, bin_uri,	suborder,	infraorder, superfamily, family, subfamily, 
+          tribe, subtribe, genus, subgenus, species, subspecies, country.ocean,	latitude,	longitude) %>%
     distinct()
   new_names <- c("bold_id",	"bold_bin",	"suborder", "infraorder",	"superfamily", "family", "subfamily",	"tribe", 
                 "subtribe",	"genus",	"subgenus",	"species", "subspecies", "country",	"latitude",	"longitude")
@@ -95,19 +104,19 @@ write_csv <- function(meta) {
 # Write fasta file for each gene
 write_fasta <- function(meta){
   # Get list of gene names
-  genes <-c(unique(meta$markercode))
+  genes <-c(unique(meta$marker_code))
   cat('Genes found: ', genes, '\n')
 
   # Loop through genes and write to file
   for (gene in genes) {
-    df <- meta %>% filter(markercode==gene)
+    df <- meta %>% filter(marker_code==gene)
     file_out <- file(paste(gene, ".fasta", sep = ''), "w")
     for (i in 1:nrow(df)) {
       cat(">", df$processid[i], "\n", file = file_out, sep = '')
-      cat(df$nucleotides[i], "\n", file = file_out, sep = '')
+      cat(df$nuc[i], "\n", file = file_out, sep = '')
     }
     close(file_out)
-    cat(length(df$nucleotides), ' sequences writen to ', gene, '.fasta\n', sep = '')
+    cat(length(df$nuc), ' sequences writen to ', gene, '.fasta\n', sep = '')
   }  
 }
 
@@ -122,11 +131,12 @@ main <- function(opt) {
   }
   if (!is.null(opt$longest)) {
     if (opt$longest %in% c("bin", "species")) {
-      filter_longest(meta, opt$longest)
+      meta <- filter_longest(meta, opt$longest)
     } else {
       stop("Invalid choice for --longest. Must be 'bin' or 'species'.", call. = FALSE)
     }
   }
+  meta <- split_coordinates(meta)
   write_csv(meta)
   write_fasta(meta)
 }
