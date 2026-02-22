@@ -14,6 +14,7 @@ def parse_args():
                         'Default is to remove duplicates from fasta (keep longest sequence for each new ID)')
     parser.add_argument("-o", "--output", type=str, help="Output fasta file")
     parser.add_argument("-r", "--renamed", type=str, help="Optional output csv with old and new names")
+    parser.add_argument("-a", "--amino_acid", type=str, help="Sequence is amino acid (default nucleotide). Needed to count gap characters in alignments.")
 
     return parser.parse_args()
 
@@ -65,7 +66,7 @@ def process_fasta_ids(input_fasta, meta, list=False):
             recs[new_id] = {rec.id: rec.seq}
     return recs
 
-def process_duplicate_ids(recs, dups=False):
+def process_duplicate_ids(recs, dups=False, aa=False):
     # Check for duplicate new IDs
     selected = {}
     removed = {}
@@ -79,7 +80,10 @@ def process_duplicate_ids(recs, dups=False):
         for rec_id, rec_seq in old.items():
             # Get sequence length
             rec_seq = rec_seq.upper()
-            gaps = rec_seq.count('-') + rec_seq.count('N') + rec_seq.count('X') + rec_seq.count('*')
+            if aa:
+                gaps = rec_seq.count('-') + rec_seq.count('X') + rec_seq.count('*')
+            else:
+                gaps = rec_seq.count('-') + rec_seq.count('N')
             length = len(rec_seq) - gaps
             # Find longest sequence
             if length > max_len:
@@ -87,15 +91,15 @@ def process_duplicate_ids(recs, dups=False):
                 if max_rec:
                     if dups:
                         selected[list(max_rec.keys())[0]] = max_rec
-                    else:
-                        removed.setdefault(new, []).append(max_rec)
+                    removed[rec_id] = new
                 max_rec = {rec_id: rec_seq}
                 max_len = length
             else:
                 if dups:
                     selected[rec_id] = {rec_id: rec_seq}
                 else:
-                    removed.setdefault(new, []).append({rec_id: rec_seq})
+                    removed[rec_id] = new
+
         selected[new] = max_rec
     return selected, removed
 
@@ -115,9 +119,9 @@ def write_csv(selected, removed, output_csv):
             #print(f'{new}:     {rec}')
             for old, seq in rec.items():
                 writer.writerow([old, new, ''])
-        for new, old in removed.items():
-            for old, seq in rec.items():
-                writer.writerow([old, new, 'yes'])
+
+        for old, new in removed.items():
+            writer.writerow([old, new, 'yes'])
     print(f'Saved old and new fasta IDs to {output_csv}')
 
 
@@ -125,7 +129,7 @@ def main():
     args = parse_args()
     meta = process_metadata(args.csv, args.list)
     recs = process_fasta_ids(args.input, meta, args.list)
-    selected, removed = process_duplicate_ids(recs, args.dups)
+    selected, removed = process_duplicate_ids(recs, args.dups, args.amino_acid)
     write_fasta(selected, args.output)
     if args.renamed:
         write_csv(selected, removed, args.renamed)

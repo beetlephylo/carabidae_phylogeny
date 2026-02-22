@@ -50,7 +50,7 @@ def find_reading_frame(records, data):
             frame_totals[f] += x
     # Choose reading frame with fewest stop codons
     frame = frame_totals.index(min(frame_totals))
-    print('Reading frame:', frame)
+    print(f'Reading frame: {int(frame) + 1}')
     length = len(records[0].seq)
     return frame, length
 

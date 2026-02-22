@@ -1,0 +1,495 @@
+#!/usr/bin/env python3
+
+import argparse
+import csv
+from Bio import Entrez
+from Bio import SeqIO
+from collections import Counter
+import time
+import re
+from Bio.Seq import Seq, UndefinedSequenceError
+
+
+genes = {"12S": ["12S", "12S RIBOSOMAL RNA", "12S RRNA", "RRNS", "SSU", "RRN12", "S-RRNA", "12S SMALL SUBUNIT RIBOSOMAL RNA", "SMALL SUBUNIT RIBOSOMAL RNA"],
+         "16S": ["16S", "16S RIBOSOMAL RNA", "16S RRNA", "RRNL", "LSU", "RRN16", "L-RRNA", "16S LARGE SUBUNIT RIBOSOMAL RNA", "LARGE SUBUNIT RIBOSOMAL RNA"],
+         "18S": ["18S", "18S RIBOSOMAL RNA", "18S RRNA", "18S SMALL SUBUNIT RIBOSOMAL RNA", "SMALL SUBUNIT RIBOSOMAL RNA"],
+         "28S": ["28S", "28S RIBOSOMAL RNA", "28S RRNA", "28S LARGE SUBUNIT RIBOSOMAL RNA", "LARGE SUBUNIT RIBOSOMAL RNA", "28S LARGE SUBUNIT"],
+
+         "ATP6": ['ATP SYNTHASE F0 SUBUNIT 6', 'APT6', 'ATP SYNTHASE A0 SUBUNIT 6', 'ATP SYNTHASE SUBUNIT 6', 'ATP SYNTHASE FO SUBUNIT 6', 'ATPASE6', 'ATPASE SUBUNIT 6', 'ATP6'],
+         "ATP8": ['ATP SYNTHASE F0 SUBUNIT 8', 'APT8', 'ATP SYNTHASE A0 SUBUNIT 8', 'ATP SYNTHASE SUBUNIT 8', 'ATP SYNTHASE FO SUBUNIT 8', 'ATPASE8', 'ATPASE SUBUNIT 8', 'ATP8'],
+
+         "COX1": ['CYTOCHROME C OXIDASE SUBUNIT 1', 'CYTOCHROME OXIDASE SUBUNIT I',   'CYTOCHROME C OXIDASE SUBUNIT I',   'COXI',   'CO1', 'COI',   'CYTOCHROME COXIDASE SUBUNIT I',   'CYTOCHROME OXIDASE SUBUNIT 1', 'CYTOCHROME OXIDASE I', 'CYTOCHROME OXYDASE SUBUNIT 1', 'CYTOCHROME OXIDASE C SUBUNIT I', 'COX 1', 'COX1', 'CYTCHROME OXIDASE SUBUNIT I', 'CYTOCHROME OXIDASE 1'],
+         "COX2": ['CYTOCHROME C OXIDASE SUBUNIT 2', 'CYTOCHROME OXIDASE SUBUNIT II',  'CYTOCHROME C OXIDASE SUBUNIT II',  'COXII',  'CO2', 'COII',  'CYTOCHROME COXIDASE SUBUNIT II',  'CYTOCHROME OXIDASE SUBUNIT 2', 'CYTOCHROME OXIDASE II', 'CYTOCHROME C OXIDASE II', 'CYTOCHROME OXYDASE C SUBUNIT 2', 'CYTOCHROME OXIDASE C SUBUNIT 2', 'COX2', 'CYTOCHROME OXIDASE (CO) II'],
+         "COX3": ['CYTOCHROME C OXIDASE SUBUNIT 3', 'CYTOCHROME OXIDASE SUBUNIT III', 'CYTOCHROME C OXIDASE SUBUNIT III', 'COXIII', 'CO3', 'COIII', 'CYTOCHROME COXIDASE SUBUNIT III', 'CYTOCHROME OXIDASE SUBUNIT 3', 'CYTOCHROME OXIDASE III', 'CYTOCHROME OXIDASE C SUBUNIT 3',  'COX3', 'CYTOMCHROME C OXIDASE SUBUNIT 1'],
+         
+         "CYTB": ['CYTOCHROME B', 'CYB', 'COB', 'COB / CYTB', 'CYTB', "COB/CYTB"],
+         "ND1": ['NAD1', 'NSD1', 'NADH1', 'NADH DEHYDROGENASE SUBUNIT I', 'NADH DEHYDROGENASE SUBUNIT 1', 'NADH DESHYDROGENASE SUBUNIT 1', 'NAD1-0', 'ND1'],
+         "ND2": ['NAD2', 'NSD2', 'NADH2', 'NADH DEHYDROGENASE SUBUNIT II', 'NADH DEHYDROGENASE SUBUNIT 2', 'NADH DESHYDROGENASE SUBUNIT 2', 'NAD2-0', 'ND2'],
+         "ND3": ['NAD3', 'NSD3', 'NADH3', 'NADH DEHYDROGENASE SUBUNIT III', 'NADH DEHYDROGENASE SUBUNIT 3', 'NADH DESHYDROGENASE SUBUNIT 3', 'NAD3-0', 'ND3'],
+         "ND4": ['NAD4', 'NSD4', 'NADH4', 'NADH DEHYDROGENASE SUBUNIT IV', 'NADH DEHYDROGENASE SUBUNIT 4', 'NADH DESHYDROGENASE SUBUNIT 4', 'NAD4-0', 'ND4'],
+         "ND4L": ['NAD4L', 'NSD4L', 'NADH4L', 'NADH DEHYDROGENASE SUBUNIT IVL', 'NADH DEHYDROGENASE SUBUNIT 4L', 'NADH DESHYDROGENASE SUBUNIT 4L', 'NAD4L-0', 'ND4L'],
+         "ND5": ['NAD5', 'NSD5', 'NADH5', 'NADH DEHYDROGENASE SUBUNIT V', 'NADH DEHYDROGENASE SUBUNIT 5', 'NADH DESHYDROGENASE SUBUNIT 5', 'NAD5-0', 'ND5'],
+         "ND6": ['NAD6', 'NSD6', 'NADH6', 'NADH DEHYDROGENASE SUBUNIT VI', 'NADH DEHYDROGENASE SUBUNIT 6', 'NADH DESHYDROGENASE SUBUNIT 6', 'NAD6-0', 'ND6'],
+         
+         "AK": ["AK", "ARGININE KINASE", "ARGK", "ARGKIN", "ARGS", "ARK"],
+         "CAD": ["CAD", "CAD FRAGMENT 1", "CARBAMOYLPHOSPHATE SYNTHETASE"],
+         "EF1A": ["EF1-ALPHA", "EF1A", "ELONGATION FACTOR 1 ALPHA", "ELONGATION FACTOR 1-ALPHA", "EF-1A"],
+         "Wg": ["WG", "WINGLESS", "WNG", "WNT", "WNT1", "WNT-4"]}
+
+mito = ['ATP6', 'ATP8', 'COX1', 'COX2', 'COX3', 'CYTB', 'ND1', 'ND2', 'ND3', 'ND4', 'ND4L', 'ND5', 'ND6']
+nuc = ['AK', 'CAD', 'EF1A', 'Wg']
+rna = ['12S', '16S', '18S', '28S']
+cds = ['ATP6', 'ATP8', 'COX1', 'COX2', 'COX3', 'CYTB', 'ND1', 'ND2', 'ND3', 'ND4', 'ND4L', 'ND5', 'ND6', 'AK', 'CAD', 'EF1A', 'Wg']
+
+suborders = ['Adephaga', 'Polyphaga', 'Myxophaga', 'Archostemata']
+
+
+
+
+def get_gbids(query, chunk=10000, retries=10, delay=30):
+    gbids = set()
+    terms = [f"txid{txid}" for txid in query] if isinstance(query, list) else [query]
+    
+    if isinstance(query, list):
+        print('Retrieving GenBank record IDs for input taxon ID list')
+    else:
+        print(f'Retrieving GenBank record IDs for {query}')
+
+    for term in terms:
+        for attempt in range(retries):
+            try:
+                # Search for records
+                with Entrez.esearch(db="nucleotide", term=term, retmax=0, usehistory="y") as search_handle:
+                    search_record = Entrez.read(search_handle)
+                count = int(search_record["Count"])
+                web_env = search_record["WebEnv"]
+                query_key = search_record["QueryKey"]
+
+                # Fetch record IDs in chunks
+                for start in range(0, count, chunk):
+                    with Entrez.esearch(db="nucleotide", term=term, retstart=start, retmax=chunk, idtype="acc", webenv=web_env, query_key=query_key) as fetch_handle:
+                        fetch_record = Entrez.read(fetch_handle)
+                    gbids.update(fetch_record['IdList'])
+                    time.sleep(1)
+                break
+            
+            except (Entrez.HTTPError, RuntimeError) as e:
+                print(f"Error for {term} on attempt {attempt + 1}: {e} Retrying in {delay} seconds...")
+                time.sleep(delay)
+        else:
+            print(f"Failed to retrieve records for {term} after {retries} attempts.")
+            return None
+
+    if not gbids:
+        print("Failed to retrieve any records.")
+        return None
+
+    print(f'Found {len(gbids)} total GenBank IDs.')
+    gbids = {id.split('.')[0] for id in gbids}
+
+    return gbids
+
+
+def set_search_parameters(args):
+    if args.ref == 'gbid':
+        gbids = []
+        file = open(args.id_list)
+        lines = file.readlines()
+        for line in lines:
+            acc = line.strip()
+            gbids.append(acc)
+        print(f'{len(gbids)} IDs found in {args.id_list}')
+
+    elif args.ref  == 'txid':
+        taxids = []
+        file = open(args.id_list)
+        lines = file.readlines()
+        for line in lines:
+            taxid = line.strip()
+            taxids.append(taxid)
+        print(f'{len(taxids)} IDs found in {args.id_list}')
+        gbids = get_gbids(taxids)
+
+    if args.taxon:
+        basesearch = f"(\"{args.taxon}\"[Organism] OR \"{args.taxon}\"[All Fields])"
+        gbids = get_gbids(basesearch)
+        #print(f"Found {len(gbids)} records for {args.taxon}")
+    
+    if args.exclude:
+        exc_accs = set()
+        with open(args.exclude, 'r') as exclude_file:
+            for line in exclude_file:
+                exc_accs.add(line.strip())
+        print(f'{len(exc_accs)} IDs found in {args.exclude} will be excluded from search results')
+
+        gbids = set(gbids) - exc_accs
+        print(f'{len(gbids)} IDs remaining after exclusions removed')
+    
+    return list(gbids)
+
+
+# Search GenBank with ID list
+def search_genbank(ids, chunk_size=500, retries=10, delay=30, save=False, output="records.gb"):
+    total = len(ids)
+    processed = 0
+    print(f'Downloading records for {total} GenBank IDs')
+
+    if save:
+        outfile = open(output, "w")
+
+    for i in range(0, len(ids), chunk_size):
+        chunk = ids[i:i+chunk_size]
+
+        for attempt in range(retries):
+            try:
+                with Entrez.efetch(db="nucleotide", id=','.join(chunk), rettype="gb", retmode="text") as handle:
+                    results = SeqIO.parse(handle, "gb")
+                    for record in results:
+                        try:
+                            processed += 1
+                            if processed % 500 == 0:
+                                print(f"Downloaded {processed} of {total} records")
+                            if processed == total:
+                                print(f"Downloaded {processed} of {total} records")
+                            yield record
+
+                            if save:
+                                SeqIO.write(record, outfile, "genbank")
+                        except HTTPException:
+                            print(f"Incompete read error with record {record.name}")
+                    break # Stop addition retries if successful
+            except (Entrez.HTTPError, RuntimeError) as e:
+                print("HTTP error fetching records; retrying in 20 seconds")
+                time.sleep(delay)
+        else:
+            print(f"Failed to retrieve records for chunk {i}-{i+chunk_size}")
+
+
+def get_feat_name(feat):
+    featnames = []
+    nametags = ['gene', 'product', 'label', 'standard_name']  # Search these four keys for gene name
+    if any(t in feat.qualifiers.keys() for t in nametags):
+        for t in nametags:
+            if t in feat.qualifiers.keys():
+                featname = feat.qualifiers[t][0].upper()
+                featnames.append(featname)
+    return featnames
+
+
+def genbank_metadata(rec, clean=False):
+    # NCBI taxon ID
+    db_xref = rec.features[0].qualifiers.get("db_xref", [])
+    txid = ""
+    for ref in db_xref:
+        if "taxon" in ref:  # Get NCBI taxon, rather than BOLD cross ref
+            txid = "".join(filter(str.isdigit, ref))  # Extract numbers from NCBI taxon value
+
+    # Taxonomy
+    # Replace the following characters: > < . ( ) ; : ' ,
+    if clean:
+        spec = re.sub(r"[><.();:'\"]", "", rec.annotations["organism"]).replace(",", "")
+        spec_parts = [part for part in spec.split(" ") if not re.search(r'\d', part) and not part.isupper()]
+        spec = " ".join(spec_parts)
+    else:
+        spec = rec.annotations["organism"]
+
+    taxonomy = ['', '', '', '', '', '']
+    for tax in rec.annotations["taxonomy"]:
+        if tax in suborders: taxonomy[0] = tax
+        if tax.endswith('formia'): taxonomy[1] = tax
+        if tax.endswith('oidea'): taxonomy[2] = tax
+        if tax.endswith('idae'): taxonomy[3] = tax
+        if tax.endswith('inae'): taxonomy[4] = tax
+        if tax.endswith('ini'): taxonomy[5] = tax
+    taxonomy_string = '|'.join(rec.annotations["taxonomy"])
+    #taxonomy.append(spec.split(' ')[0])
+    #fastatax = f"{txid}_{taxonomy[2]}_{taxonomy[3]}_{taxonomy[4]}_{specfasta}"
+
+    # Location
+    if "country" in rec.features[0].qualifiers:
+        location = rec.features[0].qualifiers["country"][0]
+        if ":" in location:
+            country, region = location.split(":", 1)
+        else:
+            country = location
+    else:
+        country = ""
+        region = ""
+    if "lat_lon" in rec.features[0].qualifiers:
+        latlon = rec.features[0].qualifiers["lat_lon"][0]
+        try:
+            ll_list = latlon.split(" ")
+            if ll_list[1] == "N":
+                lat = ll_list[0]
+            else:
+                lat = "-" + ll_list[0]
+            if ll_list[3] == "E":
+                long = ll_list[2]
+            else:
+                long = "-" + ll_list[2]
+        except IndexError:
+            lat = ""
+            long = ""
+    else:
+        latlon = ""
+        lat = ""
+        long = ""
+
+    # References
+    refs = []
+    if "references" in rec.annotations:
+        first = rec.annotations['references'][0]
+        refs.append(first.authors)
+        refs.append(first.title)
+        refs.append(first.journal)
+    output = {"gbid": rec.name,
+              "txid": txid,
+              "description": rec.description,
+              "spec_id": rec.annotations["organism"],
+              "spec": spec,
+              "date": rec.annotations["date"],
+              "taxonomy": taxonomy,
+              "country": country,
+              "lat": lat,
+              "long": long,
+              "refs": refs,
+              "row": [txid, rec.name, '', '', ''] + taxonomy + [spec, taxonomy_string, country, lat, long] + refs}
+    return output
+
+
+def find_genes(results, args):
+
+    meta = {}
+    seqs = {}
+    nohits = []
+    other_type = set()
+    misc_feature = set()
+    unrec_genes = {}
+    unrec_species = []
+    x = 0  # Count taxids
+
+    for rec in results:
+        if args.taxon:
+            if args.taxon not in rec.annotations["taxonomy"]:
+                unrec_species.append(rec.name)
+                continue
+        output = genbank_metadata(rec, args.clean)
+        meta[rec.name] = output
+        g = 0
+        for feature in rec.features:
+            type = feature.type
+            if type not in ('CDS', 'rRNA'):
+                if type == 'misc_feature':
+                    if 'note' in feature.qualifiers:
+                        misc_feature.add(tuple(feature.qualifiers['note']))
+                else:
+                    other_type.add(type)
+                continue
+            names = get_feat_name(feature)                       # Find gene name
+            stdname = ""
+            for k, v in genes.items():
+                for name in names:
+                    if name in v:
+                        stdname = k
+                        g += 1
+            if stdname == '':
+                for name in names:
+                    if name in unrec_genes:
+                        unrec_genes[name].append(rec.name)
+                    else:
+                        unrec_genes[name] = [rec.name]
+                continue
+            if args.mito:
+                if stdname not in mito:
+                    continue
+            if args.gene:
+                if stdname != args.gene:
+                    continue
+            frame = ''
+            if stdname in cds:
+                if 'codon_start' in feature.qualifiers:
+                    frame = feature.qualifiers["codon_start"][0]
+                else:
+                    print(f"Reading frame missing from record {rec.name}, {stdname}.")
+            seq = feature.extract(rec.seq)
+
+            gene_output = {"gbid": rec.name,
+                        "gene": stdname,
+                        "length": len(seq),
+                        "seq": seq,
+                        "frame": frame}
+
+            if stdname in seqs:
+                if output['txid'] in seqs[stdname]:
+                    seqs[stdname][output['txid']].append(gene_output)
+                    x += 1
+                else:
+                    seqs[stdname][output['txid']] = [gene_output]
+                    x += 1
+            else:
+                seqs[stdname] = {output['txid']: [gene_output]}
+                x += 1
+        if g == 0:
+            nohits.append(rec.name)
+    return (meta, seqs, nohits, other_type, misc_feature, unrec_genes, unrec_species)
+
+
+def findmax(x):
+    max = x[0]["length"]
+    maxrec = x[0]
+    for record in x:
+        if record["length"] > max:
+            max = record["length"]
+            maxrec = record
+    return maxrec
+
+def find_longest_seqs(seqs):
+    print("Saving longest sequence for each gene for each NCBI taxonomy ID")
+    # Dict for longest sequences, key is gene stdname, value is list of records
+    saved_recs = {}
+    for gene, tax in seqs.items():
+        for tax, records in tax.items():
+            chosen = findmax(records)
+            if gene in saved_recs:
+                if tax in saved_recs[gene]:
+                    saved_recs[gene][tax].append(chosen)
+                else:
+                    saved_recs[gene][tax] = [chosen]
+            else:
+                saved_recs[gene] = {tax: [chosen]}
+    return saved_recs
+
+
+# Argument parser
+# Add option to find only mito genes, or only selected genes.
+parser = argparse.ArgumentParser(description="Search GenBank, retrieve gene sequences and save as fasta.")
+
+# Input options - input file or search options
+parser.add_argument('-i', '--input', type=str, help="Input genbank file, rather than searching NCBI")
+# Search options
+parser.add_argument("-t", "--taxon", type=str, help="Taxon of interest")
+parser.add_argument('-id', '--id_list', type=str, help="Input file with accession or taxon ID list")
+parser.add_argument('-r', '--ref', choices=['txid', 'gbid'], help="If using --id_list option, specify accessions or taxon IDs.")
+parser.add_argument("-e", "--email", type=str, help="Your email registered with NCBI")
+parser.add_argument("-c", "--csv", type=str, help="Save metadata as csv file - provide file path")
+
+
+# Filtering options
+parser.add_argument("-x", "--exclude", type=str, help="Input file with list of accession to skip (will not search or save these records)")
+parser.add_argument('-m', '--mito', action='store_true', help='Save only mitochondrial protein-coding genes')
+parser.add_argument("-g", "--gene", type=str, help="Save specified gene only (use gene name format from genes dict below)")
+parser.add_argument("-l", "--longest", action='store_true', help="Save only longest sequence for each NCBI taxid")
+
+# Output options
+# Optional output of genbank format file as well as fasta
+parser.add_argument("-s", "--save", type=str, help="Output genbank file with initial search results - provide file path")
+parser.add_argument("-cl", "--clean", type=str, help="Remove numbers/special characters from species names")
+
+args = parser.parse_args()         # Process input args from command line
+
+def main():
+
+    # Get records
+    if args.input:
+        with open(args.input) as file:
+            results = list(SeqIO.parse(file, "genbank"))
+            print(f'{len(list(results))} records in {args.input}')
+
+        if args.exclude:
+            exc_accs = set()
+            with open(args.exclude, 'r') as exclude_file:
+                for line in exclude_file:
+                    exc_accs.add(line.strip())
+            
+            filtered = [rec for rec in results if rec.name not in exc_accs]
+            print(f'{len(filtered)} remaining after exclusions removed')
+            results = filtered
+
+        (meta, seqs, nohits, other_type, misc_feature, unrec_genes, unrec_species) = find_genes(results, args)
+        
+
+
+    if not args.input:
+        Entrez.email = args.email if args.email else None
+        gbids = set_search_parameters(args)
+        if args.save:
+            results = search_genbank(gbids, save=True, output=args.save)
+        else:
+            results = search_genbank(gbids)
+        (meta, seqs, nohits, other_type, misc_feature, unrec_genes, unrec_species) = find_genes(results, args)
+
+    # Filter out longest sequences
+    if args.longest:
+        saved_recs = find_longest_seqs(seqs)
+
+    else:
+        saved_recs = seqs
+
+    # Write fastas
+    noframe = {}
+    accessions = []
+    for gene, tax in saved_recs.items():
+        file = open(f"{gene}.fasta", "w")
+        x = 0
+        y = 0
+        for tax, records in tax.items():
+            for rec in records:
+                try:
+                    seq = rec['seq']
+                    if gene in rna:
+                        file.write(f">{rec['gbid']}\n{seq}\n")
+                        x += 1
+                    else:
+                        file.write(f">{rec['gbid']};frame={rec['frame']}\n{seq}\n")
+                        x += 1
+                        if rec['frame'] == '': 
+                            if gene in noframe: noframe[gene].append(rec['gbid'])
+                            else: noframe[gene] = [rec['gbid']]
+                    accessions.append(rec['gbid'])
+                except UndefinedSequenceError:
+                    print(f"Error extracting sequence for record '{rec['gbid']}', {gene})")
+        print(f'{x} records written to {gene}.fasta')
+
+    if args.csv:
+        # Write CSV metadata file
+        added = []
+        with open(args.csv, "w") as file:
+            writer = csv.writer(file)
+            writer.writerow(
+                ["ncbi_taxid", "genbank_accession", "bold_id", "bold_bin", "lab_id", "suborder", "infraorder", "superfamily", "family", 
+                "subfamily", "tribe", "species", "taxonomy", "country", "latitude", "longitude", "ref_authoer", "ref_title", "ref_journal"])
+            for gbid, rec in meta.items():
+                if gbid in accessions:
+                    if gbid not in added:
+                        added.append(rec['gbid'])
+                        row = rec['row']
+                    writer.writerow(row)
+            print("Metadata saved to metadata.csv")
+
+
+    if args.id_list:
+        if len(nohits) > 0:
+            print(f'\nNo requested genes found in the following records: {nohits}')
+
+    if unrec_genes != {}:
+        print("\nUnrecognised genes printed below, and to 'other_genes.csv")
+        with open("other_genes", "w") as file:
+            writer = csv.writer(file)
+            writer.writerow(['gene', 'count', 'records'])
+            for gene, recs in unrec_genes.items():
+                print(f'{gene}: {len(recs)} record' if len(recs) == 1 else f'{gene}: {len(recs)} records')
+                #recs = ', '.join(recs)
+                writer.writerow([gene, len(recs), recs])
+
+    print('\nMisc Features:')
+    print(misc_feature)
+    print("\nOther Feature Types:")
+    print(other_type)
+    # print("\nUnrecognised Species:")
+    # print(unrec_species)
+    # print("\nMissing Reading Frames:")
+    # for gene, gbids in noframe.items():
+    #     print(f"{gene}: {gbids}")
+
+if __name__ == "__main__":
+    main()
